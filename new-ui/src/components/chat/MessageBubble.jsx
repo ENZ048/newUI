@@ -4,6 +4,7 @@ import { TypeAnimation } from "react-type-animation";
 import { MessageWrapper, MessageBubble, Timestamp } from "../styled";
 
 function stripMarkdown(markdownText) {
+  if (typeof markdownText !== "string") return "";
   return markdownText
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/\*(.*?)\*/g, "$1")
@@ -18,7 +19,7 @@ const MessageItem = ({
   chatHistory,
   isTyping,
   animatedMessageIdx,
-  setAnimatedMessageIdx
+  setAnimatedMessageIdx,
 }) => {
   return (
     <MessageWrapper $isUser={msg.sender === "user"}>
@@ -30,7 +31,10 @@ const MessageItem = ({
           animatedMessageIdx !== idx ? (
             <TypeAnimation
               key={idx}
-              sequence={[stripMarkdown(msg.text), () => setAnimatedMessageIdx(idx)]}
+              sequence={[
+                stripMarkdown(msg?.text || ""),
+                () => setAnimatedMessageIdx(idx),
+              ]}
               wrapper="span"
               cursor={false}
               speed={80}
@@ -40,7 +44,7 @@ const MessageItem = ({
           ) : (
             <ReactMarkdown
               components={{
-                a: ({...props }) => (
+                a: ({ ...props }) => (
                   <a
                     {...props}
                     target="_blank"
@@ -61,17 +65,20 @@ const MessageItem = ({
                     }}
                   />
                 ),
-                p: ({...props }) => (
+                p: ({ ...props }) => (
                   <p style={{ margin: "0", padding: "0" }} {...props} />
                 ),
               }}
             >
-              {msg.text}
+              {typeof msg.text === "string" ? msg.text : ""}
             </ReactMarkdown>
           )}
         </MessageBubble>
         <Timestamp>
-          {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
         </Timestamp>
       </div>
     </MessageWrapper>

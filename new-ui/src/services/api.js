@@ -2,16 +2,30 @@
 import axios from "axios";
 
 // Base API URL — change this to match your backend
-const API_BASE = "https://api.0804.in/api";
+// const API_BASE = "https://api.0804.in/api";
+ const API_BASE = "http://localhost:5000/api";
 
-// Send OTP to email
-export const sendOtpApi = (email) => {
-  return axios.post(`${API_BASE}/otp/request-otp`, { email });
+export const getChatbotConfigApi = async (chatbotId) => {
+  const response = await axios.get(`${API_BASE}/chatbots/${chatbotId}/config`);
+  return response.data;
 };
 
-// Verify OTP
-export const verifyOtpApi = (email, otp, chatbotId, sessionId) => {
-  return axios.post(`${API_BASE}/otp/verify-otp`, { email, otp, chatbotId, sessionId });
+// UPDATED: Sends either {email} or {phone}
+export const requestOtpApi = (identifier) => {
+  return axios.post(`${API_BASE}/otp/request-otp`, identifier);
+};
+
+// UPDATED: Sends identifier, otp, and chatbotId
+export const verifyOtpApi = (identifier, otp, chatbotId) => {
+  return axios.post(`${API_BASE}/otp/verify-otp`, { ...identifier, otp, chatbotId });
+};
+
+// UPDATED: Checks session using email or phone in params
+export const checkValidSession = async (identifier, chatbotId) => {
+  const response = await axios.get(`${API_BASE}/otp/check-session`, {
+    params: { ...identifier, chatbotId },
+  });
+  return response.data;
 };
 
 // Chatbot message query
@@ -41,9 +55,3 @@ export const speechToTextApi = (audioBlob, fileExtension = ".webm") => {
     timeout: 30000,
   });
 };
-
-export const checkValidSession = (email, chatbotId) => {
-  return axios.get( `${API_BASE}/otp/check-session?email=${encodeURIComponent(
-            email
-          )}&chatbotId=${chatbotId}`);
-}
