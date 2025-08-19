@@ -1,151 +1,109 @@
-import React, { useState, useEffect, useRef } from "react";
-import ClipLoader from "react-spinners/ClipLoader";
-
-// Custom Hooks
-import { useAuth } from "./hooks/useAuth";
-import { useChat } from "./hooks/useChat";
-import { useVoice } from "./hooks/useVoice";
-
-// API Services
-import { getChatbotConfigApi, sendEnquiryApi } from "./services/api";
-
-// Styled Components (assuming they are in a single file or imported as needed)
+import React, { useRef, useState } from "react";
 import { Wrapper, Overlay, Chatbox } from "./components/styled";
-
-// UI Components
-import FloatingButton from "./components/layout/FloatingButton";
 import Header from "./components/layout/Header";
-import VoiceOverlay from "./components/voice/VoiceOverlay";
+import FloatingButton from "./components/layout/FloatingButton";
 import EmailInputStep from "./components/auth/EmailInputStep";
-import PhoneInputStep from "./components/auth/PhoneInputStep";
 import OtpVerificationStep from "./components/auth/OtpVerificationStep";
 import ChatWindow from "./components/chat/ChatWindow";
+import VoiceOverlay from "./components/voice/VoiceOverlay";
+import useClientConfig from "./hooks/useClientConfig";
+import useAuthOtp from "./hooks/useAuthOtp";
+import useResendTimer from "./hooks/useResendTimer";
+import useChat from "./hooks/useChat";
+import useDevice from "./hooks/useDevice";
 
 const SupaChatbot = ({ botAvatar, botName, chatbotId }) => {
-  // --- STATE MANAGEMENT ---
-  const [config, setConfig] = useState(null);
-  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const [showEnquiryForm, setShowEnquiryForm] = useState(false);
-  const [enquiryData, setEnquiryData] = useState({ name: "", phone: "", message: "" });
+  const { authMethod, freeMessages, uiSuggestions } = useClientConfig(chatbotId);
+
+  const {
+    identifier, setIdentifier,
+    otpSent, setOtpSent,
+    loadingOtp, loadingVerify,
+    isVerified, sessionId,
+    sendOtp, verifyOtp,
+  } = useAuthOtp({ chatbotId, authMethod });
+
+  const { resendTimeout, setResendTimeout } = useResendTimer(0);
+  const { chatHistory, isTyping, sendMessage, setChatHistory } =
+    useChat({ chatbotId, sessionId, authMethod, identifier });
+
+  const { isMobile, isRecording, toggleMic, startMic, stopMic } = useDevice();
+  const [message, setMessage] = useState("");
   const scrollRef = useRef();
 
-  // --- HOOKS ---
-  const auth = useAuth(chatbotId);
-  const chat = useChat(chatbotId, auth.sessionId, config, auth.isVerified, auth.identifier);
-  const voice = useVoice(chat.handleSendMessage);
-
-  // --- EFFECTS ---
-  // Fetch the client-specific configuration when the chatbot loads
-  useEffect(() => {
-    const fetchConfig = async () => {
-      if (!chatbotId) {
-        setIsLoadingConfig(false);
-        return;
-      }
-      try {
-        const fetchedConfig = await getChatbotConfigApi(chatbotId);
-        setConfig(fetchedConfig);
-      } catch (error) {
-        console.error("Failed to load chatbot config:", error);
-        // Set a default config or show an error state if needed
-      } finally {
-        setIsLoadingConfig(false);
-      }
-    };
-    fetchConfig();
-  }, [chatbotId]);
-
-  // Auto-scroll the chat window when new messages are added
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [chat.chatHistory, chat.isTyping, showEnquiryForm]);
-
-  // --- HANDLERS ---
   const handleClose = () => {
     setIsClosing(true);
-    setTimeout(() => {
-      setIsOpen(false);
-      setIsClosing(false);
-    }, 500); // Duration must match your CSS animation
+    setTimeout(() => { setIsOpen(false); setIsClosing(false); }, 500);
   };
 
-  const handleSubmitEnquiry = async () => {
-    // Use the verified identifier from the auth hook
-    const identifier = auth.email ? { email: auth.email } : { phone: auth.phone };
-    await sendEnquiryApi({ ...enquiryData, ...identifier });
-    setShowEnquiryForm(false);
-    setEnquiryData({ name: "", phone: "", message: "" });
-    chat.setChatHistory(prev => [...prev, { sender: 'bot', text: 'Thanks! Your enquiry has been submitted.' }]);
-  };
-
-  // --- DYNAMIC RENDERING LOGIC ---
-  const renderAuthFlow = () => {
-    const identifier = config?.auth_method === 'email' ? { email: auth.email } : { phone: auth.phone };
-
-    if (!auth.otpSent) {
-      // Render the correct input step based on the fetched config
-      if (config?.auth_method === 'whatsapp') {
-        return <PhoneInputStep phone={auth.phone} setPhone={auth.setPhone} handleSendOtp={auth.handleSendOtp} loadingOtp={auth.loadingOtp} />;
-      }
-      // Default to email
-      return <EmailInputStep email={auth.email} setEmail={auth.setEmail} handleSendOtp={auth.handleSendOtp} loadingOtp={auth.loadingOtp} />;
-    } else {
-      // The OTP verification step is the same for both methods
-      return <OtpVerificationStep otp={auth.otp} setOtp={auth.setOtp} handleVerifyOtp={() => auth.handleVerifyOtp(identifier)} loadingVerify={auth.loadingVerify} />;
-    }
-  };
-
-  const renderContent = () => {
-    // Show a loader while fetching config or checking session
-    if (isLoadingConfig || auth.isCheckingSession) {
-      return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><ClipLoader color="#a855f7" /></div>;
-    }
-
-    // If not verified, show the authentication flow
-    if (!auth.isVerified) {
-      return renderAuthFlow();
-    }
-
-    // Once verified, show the main chat window
-    return (
-      <ChatWindow
-        {...chat}
-        {...voice}
-        showEnquiryForm={showEnquiryForm}
-        setShowEnquiryForm={setShowEnquiryForm}
-        enquiryData={enquiryData}
-        setEnquiryData={setEnquiryData}
-        handleSubmitEnquiry={handleSubmitEnquiry}
-      />
-    );
-  };
-
-  // --- MAIN COMPONENT JSX ---
   return (
     <Wrapper>
       {!isOpen && <FloatingButton onClick={() => setIsOpen(true)} />}
+
       {isOpen && (
         <Overlay>
-          <Chatbox className={isClosing ? "closing" : ""} ref={scrollRef}>
-            <Header
-              botAvatar={botAvatar}
-              botName={botName}
-              online={!isLoadingConfig}
-              onClose={handleClose}
-            />
-            {renderContent()}
+          <Chatbox className={isClosing ? "closing" : ""}>
+            <Header botAvatar={botAvatar} botName={botName} online onClose={handleClose} />
+
+            {!otpSent ? (
+              <EmailInputStep
+                // if whatsapp, reuse your phone input component here
+                email={identifier}
+                setEmail={setIdentifier}
+                isEmailValid={true} // or your validator
+                setIsEmailValid={() => {}}
+                loadingOtp={loadingOtp}
+                handleSendOtp={async () => { const ok = await sendOtp(); if (ok) setResendTimeout(30); }}
+                helperText={authMethod === "email" ? "Enter your email" : "Enter your WhatsApp number"}
+              />
+            ) : chatHistory.length === 0 ? (
+              <OtpVerificationStep
+                email={identifier}
+                otpRefocusOnError
+                otp=""
+                setOtp={() => {}}
+                isVerified={isVerified}
+                loadingVerify={loadingVerify}
+                resendTimeout={resendTimeout}
+                handleSendOtp={async () => { const ok = await sendOtp(); if (ok) setResendTimeout(30); }}
+                handleVerifyOtp={async (otp) => {
+                  const ok = await verifyOtp(otp);
+                  if (ok) setTimeout(() => {
+                    setChatHistory([{ sender: "bot", text: `Hi ${identifier}, how can I help?` }]);
+                  }, 4000);
+                }}
+                setOtpSent={setOtpSent}
+              />
+            ) : (
+              <ChatWindow
+                chatHistory={chatHistory}
+                isTyping={isTyping}
+                suggestions={(uiSuggestions?.length ? uiSuggestions : [
+                  { label: "Tell me about your services", icon: "💡", bg: "#fef3c7" },
+                  { label: "What are your working hours?", icon: "⏰", bg: "#e0f2fe" },
+                  { label: "Contact support", icon: "📞", bg: "#dcfce7" },
+                ])}
+                handleSendMessage={(text) => sendMessage(text || message)}
+                message={message}
+                setMessage={setMessage}
+                isMobile={isMobile}
+                isRecording={isRecording}
+                handleMicClick={toggleMic}
+                handleMicMouseDown={startMic}
+                handleMicMouseUp={stopMic}
+                handleMicTouchStart={startMic}
+                handleMicTouchEnd={stopMic}
+              />
+            )}
+
+            <div ref={scrollRef} />
           </Chatbox>
         </Overlay>
       )}
-      <VoiceOverlay
-        botName={botName}
-        isRecording={voice.isRecording}
-        stopRecording={voice.stopRecording}
-      />
+
+      <VoiceOverlay botName={botName} isRecording={isRecording} isMobile={isMobile} stopRecording={stopMic} />
     </Wrapper>
   );
 };

@@ -1,57 +1,83 @@
 // services/api.js
 import axios from "axios";
 
-// Base API URL — change this to match your backend
-// const API_BASE = "https://api.0804.in/api";
- const API_BASE = "http://localhost:5000/api";
+// Prefer env var; fall back to localhost for dev
+const API_BASE = "http://localhost:5000/api";
 
-export const getChatbotConfigApi = async (chatbotId) => {
-  const response = await axios.get(`${API_BASE}/chatbots/${chatbotId}/config`);
-  return response.data;
+
+// Optional: create an axios instance (helps keep headers/timeouts consistent)
+const api = axios.create({
+  baseURL: API_BASE,
+  withCredentials: true, // enable if your API uses cookies
+  timeout: 30000,
+});
+
+// Fetch chatbot config
+export const getClientConfig = (chatbotId) => {
+  return axios.get(`${API_BASE}/chatbot/${chatbotId}/config`);
+};  
+
+
+// --- OTP ---
+
+/**
+ * Send OTP to email or phone.
+ * @param {{ email?: string, phone?: string }} payload
+ */
+export const sendOtpApi = ({ email, phone }) => {
+  return api.post("/otp/request-otp", { email, phone });
 };
 
-// UPDATED: Sends either {email} or {phone}
-export const requestOtpApi = (identifier) => {
-  return axios.post(`${API_BASE}/otp/request-otp`, identifier);
+/**
+ * Verify OTP for email or phone.
+ * Backend expects: { email OR phone, otp, chatbotId }
+ * Returns: { success, sessionId, ... }
+ */
+export const verifyOtpApi = ({ email, phone, otp, chatbotId }) => {
+  return api.post("/otp/verify-otp", { email, phone, otp, chatbotId });
 };
 
-// UPDATED: Sends identifier, otp, and chatbotId
-export const verifyOtpApi = (identifier, otp, chatbotId) => {
-  return axios.post(`${API_BASE}/otp/verify-otp`, { ...identifier, otp, chatbotId });
+/**
+ * Check if a session is valid.
+ * Accepts either email or phone + chatbotId as query params.
+ */
+export const checkValidSession = ({ email, phone, chatbotId }) => {
+  const params = new URLSearchParams();
+  if (email) params.set("email", email);
+  if (phone) params.set("phone", phone);
+  params.set("chatbotId", chatbotId);
+  return api.get(`/otp/check-session?${params.toString()}`);
 };
 
-// UPDATED: Checks session using email or phone in params
-export const checkValidSession = async (identifier, chatbotId) => {
-  const response = await axios.get(`${API_BASE}/otp/check-session`, {
-    params: { ...identifier, chatbotId },
-  });
-  return response.data;
-};
+// --- Chat ---
 
-// Chatbot message query
-export const chatbotApi = (query, chatbotId, email, sessionId) => {
-  return axios.post(`${API_BASE}/chat/query`, {
-    chatbotId,
+/**
+ * Send a chatbot query.
+ * Keep passing sessionId returned from verifyOtp.
+ * Include the same identifier (email or phone) you used for login.
+ */
+export const chatbotApi = ({ query, chatbotId, sessionId, email, phone }) => {
+  return api.post("/chat/query", {
     query,
-    email,
+    chatbotId,
     sessionId,
+    email,
+    phone,
   });
 };
 
-// Submit enquiry form
+// --- Enquiry form ---
+
 export const sendEnquiryApi = (payload) => {
-  return axios.post(`${API_BASE}/enquiry/submit`, payload);
+  return api.post("/enquiry/submit", payload);
 };
 
-// Speech-to-text
+// --- Speech to text ---
+
 export const speechToTextApi = (audioBlob, fileExtension = ".webm") => {
   const formData = new FormData();
   formData.append("audio", audioBlob, `voice${fileExtension}`);
-  return axios.post(`${API_BASE}/speech-to-text`, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-    withCredentials: true,
-    timeout: 30000,
+  return api.post("/speech-to-text", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
   });
 };

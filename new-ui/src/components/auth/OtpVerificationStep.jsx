@@ -1,68 +1,99 @@
-import React from "react";
-import { OtpContainer, Back, Shield, OtpTitle, SubText, EmailText, VerifyButton, ResendLink } from "../styled";
+import React, { useCallback } from "react";
+import {
+  OtpContainer,
+  Back,
+  Shield,
+  OtpTitle,
+  SubText,
+  EmailText,
+  VerifyButton,
+  ResendLink,
+} from "../styled";
 import { MdArrowBack } from "react-icons/md";
 import { FaShieldAlt } from "react-icons/fa";
 import OtpInput from "./OtpInput";
-import VerificationSuccess from "./VerificationSuccess"; // Import the new component
+import VerificationSuccess from "./VerificationSuccess";
 import ClipLoader from "react-spinners/ClipLoader";
 
 const OtpVerificationStep = ({
   otp,
   setOtp,
-  email,
+  // use a generic identifier label to support email or WhatsApp phone
+  email,                // current prop from parent; this is really the identifier string
+  label = "Email",      // "Email" | "WhatsApp"
   setOtpSent,
   handleVerifyOtp,
   loadingVerify,
   resendTimeout,
   handleSendOtp,
   loadingOtp,
-  isVerified, // Receive the new 'isVerified' prop
+  isVerified,
 }) => {
-  // If verified, show the success animation and nothing else.
-  if (isVerified) {
-    return <VerificationSuccess />;
-  }
+  // Show success animation once verified
+  if (isVerified) return <VerificationSuccess />;
 
-  // Otherwise, show the OTP form.
+  const onBack = useCallback(() => {
+    setOtpSent(false);
+    setOtp("");
+  }, [setOtpSent, setOtp]);
+
+  const onResend = useCallback(() => {
+    if (!loadingOtp && resendTimeout === 0) handleSendOtp();
+  }, [loadingOtp, resendTimeout, handleSendOtp]);
+
+  const onKeyDownVerify = useCallback(
+    (e) => {
+      if (e.key === "Enter" && !loadingVerify && otp.length === 6) {
+        handleVerifyOtp();
+      }
+    },
+    [loadingVerify, otp, handleVerifyOtp]
+  );
+
   return (
-    <OtpContainer>
-      <Back
-        onClick={() => {
-          setOtpSent(false);
-          setOtp("");
-        }}
-      >
+    <OtpContainer onKeyDown={onKeyDownVerify}>
+      <Back onClick={onBack} aria-label="Go back to identifier input">
         <MdArrowBack />
       </Back>
-      <Shield>
+
+      <Shield aria-hidden="true">
         <FaShieldAlt color="white" size={24} />
       </Shield>
-      <OtpTitle>Verify Your Email</OtpTitle>
-      <SubText>We've sent a 6-digit code to</SubText>
+
+      <OtpTitle>Verify Your {label}</OtpTitle>
+      <SubText>We&apos;ve sent a 6-digit code to</SubText>
       <EmailText>{email}</EmailText>
-      <OtpInput otp={otp} setOtp={setOtp} />
+
+      <OtpInput otp={otp} setOtp={setOtp} length={6} autoFocus />
+
       <VerifyButton
         onClick={handleVerifyOtp}
         disabled={loadingVerify || otp.length !== 6}
+        aria-disabled={loadingVerify || otp.length !== 6}
       >
         {loadingVerify ? (
           <>
-            <ClipLoader size={16} color={"#fff"} style={{ marginRight: "8px" }} />
+            <ClipLoader size={16} style={{ marginRight: 8 }} />
             Verifying...
           </>
         ) : (
           "Verify Code"
         )}
       </VerifyButton>
-      <ResendLink>
+
+      <ResendLink aria-live="polite">
         {resendTimeout > 0 ? (
           <>Resend available in <strong>{resendTimeout}s</strong></>
         ) : (
           <>
-            Didn't receive the code?{" "}
+            Didn&apos;t receive the code?{" "}
             <span
-              onClick={!loadingOtp ? handleSendOtp : undefined}
-              style={{ cursor: loadingOtp ? "not-allowed" : "pointer" }}
+              role="button"
+              tabIndex={0}
+              onClick={onResend}
+              onKeyDown={(e) => (e.key === "Enter" ? onResend() : null)}
+              style={{ cursor: loadingOtp ? "not-allowed" : "pointer", textDecoration: "underline" }}
+              aria-disabled={loadingOtp}
             >
               {loadingOtp ? "Sending..." : "Resend Code"}
             </span>
